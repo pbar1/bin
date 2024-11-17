@@ -1,0 +1,8 @@
+#!/usr/bin/env jq --compact-output --from-file --args
+
+# Select keys from JSON object
+# Usage:
+#  $ '{"foo": 1, "bar": 2}' | ./jq-keys foo
+#  {"foo":1}
+
+with_entries(select([.key] | inside($ARGS.positional)))
