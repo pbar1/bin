@@ -13,8 +13,8 @@ git clone https://github.com/pbar1/bin.git pbbin
 export PATH="$PWD/pbbin:$PATH"
 ```
 
-> [!TIP]
-> To persist the `PATH` change, don't forget to add it to your `bashrc`/`zshrc`/etc.
+To persist this change for future shell sessions, make sure to add the second
+line to your `.bashrc`/`.zshrc`/`config.fish`.
 
 ## Programs
 
