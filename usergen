@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+
+import random
+import string
+
+ALPHANUM = string.ascii_lowercase + string.digits
+
+
+def generate_random_string(length=10) -> str:
+    for _ in range(5):
+        username = "".join(random.choices(ALPHANUM, k=length))
+        if username[0] not in string.digits:
+            return username
+
+
+print(generate_random_string())
