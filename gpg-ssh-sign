@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Minimal gpg signing shim that delegates to ssh-keygen -Y sign."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog="gpg-ssh-sign", allow_abbrev=False)
+    p.add_argument("--status-fd")
+    p.add_argument("--detach-sign", action="store_true")
+    p.add_argument("--sign", action="store_true")
+    p.add_argument("--armor", action="store_true")
+    p.add_argument("--always-trust", action="store_true")
+    p.add_argument("--yes", action="store_true")
+    p.add_argument("--batch", action="store_true")
+    p.add_argument("--homedir")
+    p.add_argument("-u", "--local-user", required=True)
+    p.add_argument("input_file", nargs="?")
+    return p.parse_args(argv)
+
+
+def write_temp(prefix: str, data: bytes) -> str:
+    fd, path = tempfile.mkstemp(prefix=prefix)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    return path
+
+
+def key_args(local_user: str) -> tuple[list[str], str | None]:
+    if local_user.startswith("key::"):
+        path = write_temp("gpg-ssh-key.", (local_user[5:] + "\n").encode())
+        return ["-f", path, "-U"], path
+    if local_user.startswith("ssh-"):
+        path = write_temp("gpg-ssh-key.", (local_user + "\n").encode())
+        return ["-f", path, "-U"], path
+    return ["-f", os.path.expanduser(local_user)], None
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    payload = open(args.input_file, "rb").read() if args.input_file else sys.stdin.buffer.read()
+    payload_path = write_temp("gpg-ssh-payload.", payload)
+    kargs, ktmp = key_args(args.local_user)
+    sig_path = payload_path + ".sig"
+    ssh_keygen = os.environ.get("GPG_SSH_PROGRAM", "ssh-keygen")
+
+    try:
+        proc = subprocess.run(
+            [ssh_keygen, "-Y", "sign", "-n", "git", *kargs, payload_path],
+            stdout=subprocess.DEVNULL,
+            stderr=sys.stderr,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return proc.returncode
+        if not os.path.exists(sig_path):
+            print("gpg-ssh-sign: missing signature output", file=sys.stderr)
+            return 1
+        sig = open(sig_path, "rb").read()
+        if not sig:
+            print("gpg-ssh-sign: empty signature output", file=sys.stderr)
+            return 1
+        sys.stdout.buffer.write(sig)
+        return 0
+    finally:
+        for p in (payload_path, sig_path, ktmp):
+            if p:
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
